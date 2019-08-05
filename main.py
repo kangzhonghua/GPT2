@@ -12,6 +12,9 @@ from inputs import *
 from model_fns import *
 from predict_fns import *
 
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "0,2"
+
 # This program was designed to function with multiple kinds of models, but currently only GPT2 is supported
 # The first element in the tupel is the model function, the second is the function called when predicting
 models = {
@@ -19,6 +22,7 @@ models = {
 }
 
 inputs = {
+    "gpt2_huamei_corpus_seg_tsv_128k":gpt2_huamei_corpus_seg_tsv_128k,
     "openwebtext": openwebtext, # Standard OpenWebtext input
     "openwebtext_longbiased": openwebtext_longbiased, # OpenWebtext with a bias towards showing more long (>512 tokens) examples
     "openwebtext_long": openwebtext_long, # Openwebtext that only shows long examples
@@ -120,13 +124,18 @@ if __name__ == "__main__":
             params["text_len"] = len(tokens)
             if params["text_len"] > 1024:
                 params["text_len"] = 1024
-
+                
+        strategy = tf.contrib.distribute.MirroredStrategy(num_gpus=2)
+        
         run_config = tf.estimator.RunConfig(
             model_dir=params["model_path"],
             session_config=tf.ConfigProto(
                 # log_device_placement=True,
                 # allow_soft_placement=True
-            ),
+            )
+            ,train_distribute=strategy
+            ,save_checkpoints_secs=3600
+            ,keep_checkpoint_max=40
         )
 
         network = tf.estimator.Estimator(
@@ -139,24 +148,60 @@ if __name__ == "__main__":
         predict_fn(network, text, params)
         sys.exit()
 
+    DEBUG_Inc_mem = True
+    
     # Train eval loop
     while True:
         start = time.time()
 
-        network.train(
-                input_fn=partial(input_fn, eval=False),
-                steps=params["train_steps"])
+        if(not DEBUG_Inc_mem):
+            network.train(
+                    input_fn=partial(input_fn, eval=False),
+                    steps=params["train_steps"])
 
 
-        end = time.time()
-        logger.info("\nTrain loop took {:.2f}s\n".format(end-start))
+            end = time.time()
+            logger.info("\nTrain loop took {:.2f}s\n".format(end-start))
 
-        eval_result = network.evaluate(
-           input_fn=partial(input_fn, eval=True),
-           steps=params["eval_steps"])
+            eval_result = network.evaluate(
+               input_fn=partial(input_fn, eval=True),
+               steps=params["eval_steps"])
 
-        logger.info("\nEval Results: {}\n".format(str(eval_result)))
+            logger.info("\nEval Results: {}\n".format(str(eval_result)))
+        else:
+            
+            """
+            serving_feature_spec = tf.feature_column.make_parse_example_spec(
+                  categorical_feature_a_emb)
+            
+            serving_input_receiver_fn = (
+                  tf.estimator.export.build_parsing_serving_input_receiver_fn(
+                  serving_feature_spec))
 
+            exporter = tf.estimator.BestExporter(
+                  name="best_exporter",
+                  serving_input_receiver_fn=serving_input_receiver_fn,
+                  exports_to_keep=10)
+            """
+            
+            #用train_and_evaluate避免内存增长
+            train_spec = tf.estimator.TrainSpec(input_fn=partial(input_fn, eval=False),max_steps=params["max_steps"])
+            eval_spec = tf.estimator.EvalSpec(input_fn=partial(input_fn, eval=True),
+                                              steps=params["eval_steps"],
+                                                start_delay_secs=120,
+                                                throttle_secs=3600,
+                                                 #exporters=exporter
+                                             )
+
+            eval_result = tf.estimator.train_and_evaluate(network, train_spec, eval_spec)
+            
+            logger.info("\nEval Results: {}\n".format(str(eval_result)))
+            end = time.time()
+            logger.info("\nTrain and eval loop took {:.2f}s\n".format(end-start))
+        
+        global_step = network.get_variable_value("global_step")
+        
+        print("global_step:",global_step)
         if network.get_variable_value("global_step") > params["max_steps"]:
             logger.info("Done!")
             break

@@ -1,6 +1,26 @@
 import os
 
 import tensorflow as tf
+def gpt2_huamei_corpus_seg_tsv_128k(params, eval=False, batch=True):
+    if not eval:
+        numbers = [
+                    0,  	1,  	2,  	3,  	4,  	5,  	6,  	7,  	8,  	#9, 
+                    10, 	11, 	12, 	13, 	14, 	15, 	16, 	17, 	18, 	19,
+                    20, 	21, 	22, 	23, 	24, 	25, 	26, 	27, 	28, 	#29,  
+                    30, 	31, 	32, 	33, 	34, 	35, 	36, 	37, 	38, 	39,  
+                    40, 	41, 	42, 	43, 	44, 	45, 	46, 	47, 	48, 	#49,  
+                    50, 	51, 	52, 	53, 	54, 	55, 	56, 	57, 	58, 	59, 
+                    60, 	61, 	62, 	63, 	64, 	65, 	66, 	67, 	68, 	#69,  
+                    70, 	71, 	72, 	73, 	74, 	75, 	76, 	77, 	78, 	79, 
+                    80, 	81, 	82, 	83, 	84, 	85, 	86, 	87, 	88, 	#89
+                  ]
+    else:
+        numbers = [9, 29,49,69,89]
+        
+    files = [os.path.join(params["data_path"], "gpt2_huamei_corpus_seg_{}.tfrecords".format(str(i))) for i in numbers]
+
+    return bpe_text(params["batch_size"], files, amount=params["n_ctx"], iterations=params["iterations"], stitch=1,batch=batch)
+
 
 # Expects .tfrecords files as produced by the script in datasets in a google storage bucket
 
@@ -75,7 +95,7 @@ def bpe_text(batch_size, files, iterations, stitch, amount=1024, batch=True):
 
         out = _get_x(0)
         for i in range(1, stitch):
-            out = tf.concat([out, [50256], _get_x(i)], axis=0) # text1<|endoftext|>text2
+            out = tf.concat([out, [5], _get_x(i)], axis=0) # text1<|endoftext|>text2
 
         return out
 

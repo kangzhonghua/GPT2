@@ -6,6 +6,8 @@ import regex as re
 from functools import lru_cache
 
 import tensorflow as tf
+import sentencepiece as spm
+import youtokentome as yttm
 
 @lru_cache()
 def bytes_to_unicode():
@@ -106,13 +108,51 @@ class Encoder:
         text = bytearray([self.byte_decoder[c] for c in text]).decode('utf-8', errors=self.errors)
         return text
 
+class Encoder_BPE:
+    def __init__(self, model_path):
+        self.sp = spm.SentencePieceProcessor()
+        self.sp.Load(model_path)
+        
+
+    def encode(self, text):
+        return self.sp.EncodeAsIds(text)
+
+
+    def decode(self, tokens):
+        text = [int(token) for token in tokens]
+        #print(text)
+        return self.sp.DecodeIds(text)
+
+class Encoder_yytm:
+    def __init__(self, model_path):
+        self.bpe = yttm.BPE(model=model_path)                
+
+    def encode(self, text):
+        return self.bpe.encode(text, output_type=yttm.OutputType.ID)
+
+
+    def decode(self, tokens):
+        ids = [int(token) for token in tokens]
+        #print(text)
+        return self.bpe.decode(ids)[0]
+    
 def get_encoder(encoder_path):
-    with tf.gfile.Open(os.path.join(encoder_path, 'encoder.json'), 'r') as f:
-        encoder = json.load(f)
-    with tf.gfile.Open(os.path.join(encoder_path, 'vocab.bpe'), 'r') as f: # utf-8?
-        bpe_data = f.read()
-    bpe_merges = [tuple(merge_str.split()) for merge_str in bpe_data.split('\n')[1:-1]]
-    return Encoder(
-        encoder=encoder,
-        bpe_merges=bpe_merges,
+    
+    filepath, tmpfilename = os.path.split(encoder_path)
+    shotname, extension = os.path.splitext(tmpfilename)
+    #print(shotname, extension)
+    
+    if(".model" == extension):
+        return Encoder_BPE(encoder_path)
+    elif(".yytm" == extension):
+        return Encoder_yytm(encoder_path)
+    else:
+        with tf.gfile.Open(os.path.join(encoder_path, 'encoder.json'), 'r') as f:
+            encoder = json.load(f)
+        with tf.gfile.Open(os.path.join(encoder_path, 'vocab.bpe'), 'r') as f: # utf-8?
+            bpe_data = f.read()
+        bpe_merges = [tuple(merge_str.split()) for merge_str in bpe_data.split('\n')[1:-1]]
+        return Encoder(
+            encoder=encoder,
+            bpe_merges=bpe_merges,
 )
