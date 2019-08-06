@@ -122,19 +122,6 @@ class Encoder_BPE:
         text = [int(token) for token in tokens]
         #print(text)
         return self.sp.DecodeIds(text)
-
-class Encoder_yytm:
-    def __init__(self, model_path):
-        self.bpe = yttm.BPE(model=model_path)                
-
-    def encode(self, text):
-        return self.bpe.encode(text, output_type=yttm.OutputType.ID)
-
-
-    def decode(self, tokens):
-        ids = [int(token) for token in tokens]
-        #print(text)
-        return self.bpe.decode(ids)[0]
     
 def get_encoder(encoder_path):
     
@@ -144,8 +131,8 @@ def get_encoder(encoder_path):
     
     if(".model" == extension):
         return Encoder_BPE(encoder_path)
-    elif(".yytm" == extension):
-        return Encoder_yytm(encoder_path)
+    #elif(".yytm" == extension):
+    #    return Encoder_yytm(encoder_path)
     else:
         with tf.gfile.Open(os.path.join(encoder_path, 'encoder.json'), 'r') as f:
             encoder = json.load(f)
